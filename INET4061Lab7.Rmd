@@ -1,0 +1,172 @@
+---
+title: "INET 4061 Lab 7"
+author: "Kevin Yang"
+date: "October 30, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+Utilize the built-in Agaricus dataset in R. Create a classification model and an xgboost (Extreme Gradient Boosting) model to predict whether a mushroom is edible using the Agaricus dataset.  Compare the accuracies between both models. Improve model performance with ensemble learning with xgboost.    
+
+
+Code References:
+https://github.com/dmlc/xgboost/blob/master/R-package/demo/basic_walkthrough.R
+
+https://rstudio-pubs-static.s3.amazonaws.com/286088_a371b3eba67c48d488e840b70af38eb6.html
+
+https://github.com/jayanttikmani/cross-sellingCaravanInsuranceUsingDataMining/blob/master/CaravanInsurance-DataMining.ipynb
+
+https://www.youtube.com/watch?v=Ysh2gs8VKvQ
+https://www.dataschool.io/simple-guide-to-confusion-matrix-terminology/
+https://discuss.analyticsvidhya.com/t/what-is-null-and-residual-deviance-in-logistic-regression/2605/4
+https://xgboost.readthedocs.io/en/latest/get_started.html
+
+## Data
+```{r data}
+require(xgboost)
+require(methods)
+library(ggplot2)
+library(glmnet)
+library(stringr)
+library(rpart)
+library(rattle)
+library(caret)
+
+#data("Mushroom")
+
+data(agaricus.train, package='xgboost')
+data(agaricus.test, package='xgboost')
+?agaricus.train
+?agaricus.test
+train <- agaricus.train
+test <- agaricus.test
+```
+Multiple libraries are loaded to create classification and xgboost model. The agaricus dataset is originally from the built-in 'Mushroom' dataset. The training and testing dataset is provided by the 'xgboost' package. Both datasets include the following fields:  
+
+label - the label for each record
+
+data - a sparse Matrix of dgCMatrix class, with 126 columns.
+
+The training dataset contains a label vector, and a dgCMatrix object with 6513 rows and 127 variables.
+
+The testing dataset contains a label vector, and a dgCMatrix object with 1611 rows and 126 variables
+
+The dgCMatrix class is a class of sparse numeric matrices in the compressed, sparse, column-oriented format. In this implementation the non-zero elements in the columns are sorted into increasing row order. dgCMatrix is the "standard" class for sparse numeric matrices in the Matrix package
+
+## Exploratory Data Analysis
+```{r summ}
+summary(train)
+summary(test)
+```
+We can see through summary() that it supports our field descriptions above. Both the training and testing datasets contain data and label. Each field has a specific Length, Class and Mode.  Both datasets contain labels that contain no Class and are numeric vectors, a Mode of S4 and data containing a Class of a sparse dgCMatrix. The training set for agaricus contains data with a length of 820638 that is unknown and a label with a length of 6513. The testing set for agaricus contains data with a length of 202986 and a label with a length of 1611.
+```{r struct}
+str(train)
+```
+From the str() command, we can see the agaricus training dataset contain variables along with their types such as, i (integer), p (integer), Dim (Dimension)(integer), Dimnames (Dimension Names)(List of NULLs and characters), x (numeric) and factors (list). The label is numeric, which supports our description above. It seems to contain binary values of 1 and 0, which could equate to mushroom edibleness.
+
+```{r dim}
+#colSums(as.matrix(train$data))
+dimnames(train$data)
+```
+dimnames() provides the names of the different dimensions in the agaricus training dataset. We can see that there is a NULL dimension and another containing various variables describing mushroom. It seems to be ordered in odd values. The even values should contain the integer values for the variables. 
+
+```{r XGFeatureplot}
+bst <- xgboost(data = train$data, label = train$label, max_depth = 2, eta = 1, nrounds = 2,
+               nthread = 2, objective = "binary:logistic")
+imp_matrix <- xgb.importance(feature_names = colnames(train$data), model = bst)
+# Feature importance bar plot by gain
+print("Feature importance Plot : ")
+print(xgb.plot.importance(importance_matrix = imp_matrix))
+
+````
+This displays the Feature Importance of the xgboost bar plot by gains. We can see that the mushroom having no odor has the most gains greater than 0.6.  It is unsure if the variables with the highest gains indicate edibleness or not. Based on the bar plot, the mushroom(edible or not) should not have odor, should have a rooted and clubbed stalk-root and have green spores. 
+
+## Model
+
+```{r XGBoost}
+class(train$label)
+class(train$data)
+
+print("Training xgboost with sparseMatrix")
+bst <- xgboost(data = train$data, label = train$label, max_depth = 2, eta = 1, nrounds = 2,
+               nthread = 2, objective = "binary:logistic")
+
+pred <- predict(bst, test$data)
+err <- mean(as.numeric(pred > 0.5) != test$label)
+print(paste("test-error=", err))
+
+# Finally, you can check which features are the most important.
+print("Most important features (look at column Gain):")
+imp_matrix <- xgb.importance(feature_names = colnames(train$data), model = bst)
+print(imp_matrix)
+
+```
+The first model is the Extreme Gradient Boosting model. xgboost() is utilized to train a Booster(model) with the sparse data in the training dataset. The learning objective of the model is a logistic regression for binary classification that outputs a probability. predict() does prediction on the xgboost() model. The mean() is used to determine the test error, which is 0.021. 
+The function provides a training error of 0.04 and 0.02, which is near similar to the test error and could equate to high accuracy of the data. 
+
+
+```{r LOGREGglmnet}
+#Classify Using Logistic Regression
+fit <- glmnet(train$data,train$label)
+pred <- predict(fit,test$data)
+#```
+#```{r glm}
+#fit <- glmnet(train$data,train$label)
+#pred <- predict(fit,test$data, type="response")
+df <- as.data.frame(as.matrix(train$data))
+
+logisticTrainingFit <- glm(train$label ~ ., family = "binomial", data = df)
+logisticTrainingFit
+```
+I will be utilizing a Logistic Regression classification model for this lab. I fitted the logistic regression model using glm(). The response variable is the numeric vector 'label' and is being compared with data provided above. From the model, you can see that some data variables contain 'NA' values. There is a Null Deviance of 9021. The Residual Deviance is 3.779e-08. The AIC is 172 and is quite far in distance compared to the Null Deviance. It is a relative measure of model parsimony. We can see that an addition of 85 (6512 - 6427) decreased the deviance to 3.779e-08 from 9021. 
+
+```{r LogRegContinued}
+#summary(logisticTrainingFit)
+dftest <- as.data.frame(as.matrix(test$data))
+pred <- predict(logisticTrainingFit, dftest)
+
+actual <- test$label
+actual <- as.factor(actual)
+PredictedClass <- as.factor(as.numeric(pred) > 0.5)
+levels(PredictedClass)
+str(PredictedClass)
+str(actual)
+
+PredictedClass[1:10]
+
+p <- as.numeric(PredictedClass) - 1
+
+p[1:5]
+
+p <- as.factor(as.numeric(PredictedClass) == TRUE)
+a <- as.factor(as.numeric(actual) == 1)
+
+
+confusionMatrix(a, p, positive = "TRUE")
+
+#p value - feature importance
+```
+We can see that there is a very high accuracy using the Logistic Regression Classification model (.9977). Although it may seem too accurate being near 100%, the overall test ran successfully results in a near 100% accuracy. From the Confusion Matrix, we can see that there are 776 True Negatives and 835 True Positives. The P value of the model is less than 2.2e-16, which mean the null hypothesis should be rejected.   
+```{r Precision and recall}
+#use to determine edibleness
+pre<-precision(p,a)#false positive waste mushroom because it is edible
+
+rec<-recall(p,a)#how good is this algor
+pre
+rec
+```
+Precision and Recall statistic is 1, which supports the high accuracy of the overall model. The Precision equates to "if it predicts that the mushroom is edible, how often is it correct?". Recall equates to "how reliable is this algorithm in determining that the mushroom is edible or not?".
+
+```{r}
+varImp(logisticTrainingFit, scale = FALSE)
+```
+varImp() specifies which variables hold high importance. From observation, we can see that the variable with the highest importance is a mushroom with a flat-shaped cap, has a numerous population and resides in the meadows habitat. 
+
+## Conclusion
+We can see that both models have different characteristics for edibleness. The xgboost model requires mushrooms to not have odor, have a rooted and clubbed stalk-root and have green spores. The logistic regression model requires characteristics of a mushroom detailed above. I will assume that characteristics with high gains from the xgboost and high importance from the logistic regression model equate to characteristics of mushrooms that CAN be eaten and are edible. In regards to accuracy, it appears that the logistic regression is more accurate. 
+
+
