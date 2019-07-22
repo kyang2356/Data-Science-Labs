@@ -155,7 +155,7 @@ We can see that there is a very high accuracy using the Logistic Regression Clas
 #use to determine edibleness
 pre<-precision(p,a)#false positive waste mushroom because it is edible
 
-rec<-recall(p,a)#how good is this algor
+rec<-recall(p,a) #how effective is this algorithm?
 pre
 rec
 ```
