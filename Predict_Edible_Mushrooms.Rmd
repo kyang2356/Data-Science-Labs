@@ -1,5 +1,5 @@
 ---
-title: "INET 4061 Lab 7"
+title: "XGBoost and Classification to Predict Edible Mushrooms"
 author: "Kevin Yang"
 date: "October 30, 2018"
 output: html_document
